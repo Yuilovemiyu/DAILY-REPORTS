@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HC/PG SA Monthly Report</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <style>
+    body { font-family: Arial; padding: 15px; }
+
+    input, select, button {
+      margin: 5px;
+      padding: 8px;
+      width: 100%;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+    }
+
+    th, td {
+      border: 1px solid #000;
+      padding: 6px;
+      text-align: center;
+      font-size: 12px;
+    }
+
+    .edit-btn {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 4px 6px;
+      cursor: pointer;
+    }
+
+    /* MODAL */
+    #bonusModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 9999;
+    }
+
+    #bonusBox {
+      width: 95%;
+      height: 90%;
+      margin: 20px auto;
+      background: #fff;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    #bonusBox header {
+      background: #005bac;
+      color: white;
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    #bonusBox iframe {
+      width: 100%;
+      height: calc(100% - 50px);
+      border: none;
+    }
+
+    #closeBtn {
+      background: red;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+<h2>📊 HC/PG SA Monthly Report</h2>
+
+<button onclick="openBonus()">💰 Bonus Calculator</button>
+
+<input type="date" id="date">
+
+<select id="store"></select>
+
+<input type="number" id="total" placeholder="Total Apps">
+<input type="number" id="signed" placeholder="Signed">
+<input type="number" id="rejected" placeholder="Rejected">
+<input type="number" id="cancelled" placeholder="Cancelled">
+
+<select id="nonapps" disabled>
+  <option value="">Non Apps</option>
+  <option value="Yes">Yes</option>
+  <option value="No">No</option>
+</select>
+
+<button onclick="addEntry()">➕ Add Entry</button>
+<button onclick="saveAllToday()">💾 Save All</button>
+<button onclick="updateEntry()">💾 Save Update</button>
+
+<h3>📦 Preview</h3>
+<table id="previewTable"></table>
+
+<h3>📅 Daily Report</h3>
+
+<input type="date" id="filterDate">
+<button onclick="loadDayReport()">🔍 Load Day</button>
+<button onclick="saveDayPNG()">🖼 Save PNG</button>
+
+<div id="dayCapture">
+  <h4 id="dayTitle"></h4>
+  <table id="dayReportTable"></table>
+</div>
+
+<h3>📊 Monthly Totals</h3>
+<table id="monthlyTotals"></table>
+
+<!-- BONUS MODAL -->
+<div id="bonusModal">
+  <div id="bonusBox">
+    <header>
+      <h3>💰 Bonus Calculator</h3>
+      <button id="closeBtn" onclick="closeBonus()">Close</button>
+    </header>
+    <iframe src="https://yuilovemiyu.github.io/Bonus-Calculator/"></iframe>
+  </div>
+</div>
+
+<script>
+
+// ================= FIREBASE =================
+const firebaseConfig = {
+  apiKey: "AIzaSyBoPZ6nioxI_fzVrdLSh-pQ_EEqSdPOnrY",
+  authDomain: "pattern-for-reporting.firebaseapp.com",
+  projectId: "pattern-for-reporting"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ================= STORES =================
+const stores = [
+  "Brookside","Manggahan","Bacoor","Dasmarinas","Gentri Jr.",
+  "Tanza","Kawit","Tanza Paradahan","GMA","Tagaytay",
+  "Molino","Paliparan","San Pedro","Pacita",
+  "Binan Bayan","Crossing East","Anabu (Yssabelle)","Anabu (Ian)"
+];
+
+// ================= STATE =================
+let todayEntries = [];
+let editingId = null;
+
+// ================= INIT =================
+const storeSelect = document.getElementById("store");
+
+stores.forEach(s=>{
+  let o = document.createElement("option");
+  o.value = s;
+  o.text = s;
+  storeSelect.appendChild(o);
+});
+
+date.value = new Date().toISOString().split("T")[0];
+filterDate.value = date.value;
+
+// ================= NON APPS =================
+total.addEventListener("input", ()=>{
+  nonapps.disabled = Number(total.value) > 1;
+});
+
+// ================= RESET =================
+function reset(){
+  store.selectedIndex = 0;
+  total.value = "";
+  signed.value = "";
+  rejected.value = "";
+  cancelled.value = "";
+  nonapps.value = "";
+}
+
+// ================= ADD =================
+function addEntry(){
+
+  todayEntries.push({
+    date: date.value,
+    store: store.value,
+    total: Number(total.value||0),
+    signed: Number(signed.value||0),
+    rejected: Number(rejected.value||0),
+    cancelled: Number(cancelled.value||0),
+    nonapps: nonapps.value || "-"
+  });
+
+  renderPreview();
+  reset();
+}
+
+// ================= PREVIEW =================
+function renderPreview(){
+
+  previewTable.innerHTML = `
+    <tr>
+      <th>Date</th><th>Store</th>
+      <th>Total</th><th>Signed</th>
+      <th>Rejected</th><th>Cancelled</th><th>Non Apps</th>
+    </tr>
+  `;
+
+  todayEntries.forEach(e=>{
+    previewTable.innerHTML += `
+      <tr>
+        <td>${e.date}</td>
+        <td>${e.store}</td>
+        <td>${e.total}</td>
+        <td>${e.signed}</td>
+        <td>${e.rejected}</td>
+        <td>${e.cancelled}</td>
+        <td>${e.nonapps}</td>
+      </tr>
+    `;
+  });
+}
+
+// ================= SAVE =================
+async function saveAllToday(){
+
+  if(todayEntries.length === 0) return alert("No data");
+
+  const batch = db.batch();
+
+  todayEntries.forEach(e=>{
+    batch.set(db.collection("reports").doc(), e);
+  });
+
+  await batch.commit();
+
+  todayEntries = [];
+  renderPreview();
+
+  await recomputeMonthly();
+
+  alert("Saved!");
+}
+
+// ================= MONTHLY RECOMPUTE =================
+async function recomputeMonthly(){
+
+  const snap = await db.collection("reports").get();
+
+  const map = {};
+
+  snap.forEach(doc=>{
+    const d = doc.data();
+    const month = d.date?.substring(0,7);
+    if(!month) return;
+
+    const key = month + "_" + d.store;
+
+    if(!map[key]){
+      map[key] = {
+        month,
+        store: d.store,
+        total:0,
+        signed:0,
+        rejected:0,
+        cancelled:0
+      };
+    }
+
+    map[key].total += Number(d.total||0);
+    map[key].signed += Number(d.signed||0);
+    map[key].rejected += Number(d.rejected||0);
+    map[key].cancelled += Number(d.cancelled||0);
+  });
+
+  const batch = db.batch();
+
+  Object.values(map).forEach(t=>{
+    batch.set(db.collection("monthly_totals").doc(t.month+"_"+t.store), t);
+  });
+
+  await batch.commit();
+}
+
+// ================= MONTHLY LOAD FIX (IMPORTANT) =================
+function loadMonthlyTotals(){
+
+  db.collection("monthly_totals")
+    .onSnapshot(snapshot=>{
+
+      monthlyTotals.innerHTML = `
+        <tr>
+          <th>Month</th><th>Store</th>
+          <th>Total</th><th>Signed</th>
+          <th>Rejected</th><th>Cancelled</th>
+        </tr>
+      `;
+
+      if(snapshot.empty){
+        monthlyTotals.innerHTML += `<tr><td colspan="6">No data</td></tr>`;
+        return;
+      }
+
+      let grouped = {};
+
+      snapshot.forEach(doc=>{
+        const d = doc.data();
+        if(!grouped[d.month]) grouped[d.month] = [];
+        grouped[d.month].push(d);
+      });
+
+      Object.keys(grouped).sort().forEach(month=>{
+
+        let t=0,s=0,r=0,c=0;
+
+        monthlyTotals.innerHTML += `
+          <tr style="background:#ddd;font-weight:bold">
+            <td colspan="6">${month}</td>
+          </tr>
+        `;
+
+        grouped[month].forEach(d=>{
+          t+=d.total; s+=d.signed; r+=d.rejected; c+=d.cancelled;
+
+          monthlyTotals.innerHTML += `
+            <tr>
+              <td>${d.month}</td>
+              <td>${d.store}</td>
+              <td>${d.total}</td>
+              <td>${d.signed}</td>
+              <td>${d.rejected}</td>
+              <td>${d.cancelled}</td>
+            </tr>
+          `;
+        });
+
+        monthlyTotals.innerHTML += `
+          <tr style="font-weight:bold;background:#f2f2f2">
+            <td colspan="2">${month} TOTAL</td>
+            <td>${t}</td>
+            <td>${s}</td>
+            <td>${r}</td>
+            <td>${c}</td>
+          </tr>
+        `;
+      });
+
+    });
+}
+
+// ================= DAILY =================
+function loadDayReport(){
+
+  const day = filterDate.value;
+  dayTitle.innerText = "Daily: " + day;
+
+  db.collection("reports")
+    .where("date","==",day)
+    .onSnapshot(snap=>{
+
+      dayReportTable.innerHTML = `
+        <tr>
+          <th>Date</th><th>Store</th>
+          <th>Total</th><th>Signed</th>
+          <th>Rejected</th><th>Cancelled</th><th>Non Apps</th><th>Action</th>
+        </tr>
+      `;
+
+      snap.forEach(doc=>{
+        const d = doc.data();
+
+        dayReportTable.innerHTML += `
+          <tr>
+            <td>${d.date}</td>
+            <td>${d.store}</td>
+            <td>${d.total}</td>
+            <td>${d.signed}</td>
+            <td>${d.rejected}</td>
+            <td>${d.cancelled}</td>
+            <td>${d.nonapps}</td>
+            <td><button class="edit-btn" onclick='editEntry("${doc.id}", ${JSON.stringify(d)})'>Edit</button></td>
+          </tr>
+        `;
+      });
+    });
+}
+
+// ================= EDIT =================
+function editEntry(id,data){
+
+  if(typeof data === "string") data = JSON.parse(data);
+
+  date.value = data.date;
+  store.value = data.store;
+  total.value = data.total;
+  signed.value = data.signed;
+  rejected.value = data.rejected;
+  cancelled.value = data.cancelled;
+  nonapps.value = data.nonapps;
+
+  editingId = id;
+}
+
+// ================= UPDATE =================
+async function updateEntry(){
+
+  await db.collection("reports").doc(editingId).update({
+    date: date.value,
+    store: store.value,
+    total: Number(total.value),
+    signed: Number(signed.value),
+    rejected: Number(rejected.value),
+    cancelled: Number(cancelled.value),
+    nonapps: nonapps.value
+  });
+
+  editingId = null;
+  await recomputeMonthly();
+
+  alert("Updated");
+}
+
+// ================= BONUS =================
+function openBonus(){
+  bonusModal.style.display = "block";
+}
+
+function closeBonus(){
+  bonusModal.style.display = "none";
+}
+
+// ================= INIT LOAD =================
+window.onload = ()=>{
+  loadMonthlyTotals();
+};
+
+</script>
+
+</body>
+</html>
