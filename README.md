@@ -1,4 +1,4 @@
-# 📊 HC/PG SA Monthly Report System
+# 📊 HC/PG SA Daily Report System
 
 A Firebase-based reporting system with daily tracking, monthly totals, and bonus calculator integration.
 
