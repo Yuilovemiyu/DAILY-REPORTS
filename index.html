@@ -2,12 +2,10 @@
 <html>
 <head>
   <title>HC/PG SA Monthly Report</title>
-
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
   <style>
     body { font-family: Arial; padding: 15px; }
@@ -31,63 +29,69 @@
       font-size: 12px;
     }
 
-    .edit-btn {
-      background: #007bff;
-      color: white;
-      border: none;
-      padding: 4px 6px;
-      cursor: pointer;
+    #app { display:none; }
+    #userBox { max-width:400px; margin:auto; }
+
+    #bonusModal{
+      display:none;
+      position:fixed;
+      top:0; left:0;
+      width:100%; height:100%;
+      background:rgba(0,0,0,0.6);
+      z-index:999;
     }
 
-    /* MODAL */
-    #bonusModal {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.7);
-      z-index: 9999;
+    #bonusBox{
+      width:90%; height:90%;
+      background:white;
+      margin:2% auto;
+      padding:10px;
+      border-radius:10px;
+      display:flex;
+      flex-direction:column;
     }
 
-    #bonusBox {
-      width: 95%;
-      height: 90%;
-      margin: 20px auto;
-      background: #fff;
-      border-radius: 10px;
-      overflow: hidden;
-    }
-
-    #bonusBox header {
-      background: #005bac;
-      color: white;
-      padding: 10px;
-      display: flex;
-      justify-content: space-between;
-    }
-
-    #bonusBox iframe {
-      width: 100%;
-      height: calc(100% - 50px);
-      border: none;
-    }
-
-    #closeBtn {
-      background: red;
-      color: white;
-      border: none;
-      padding: 5px 10px;
+    #bonusBox iframe{ flex:1; border:none; }
+    #bonusBox header{
+      display:flex;
+      justify-content:space-between;
     }
   </style>
 </head>
 
 <body>
 
-<h2>📊 HC/PG SA Monthly Report</h2>
+<!-- ✅ SIMPLE USER ENTRY -->
+<div id="userBox">
+  <h2>Enter Details</h2>
 
-<button onclick="openBonus()">💰 Bonus Calculator</button>
+  <input id="username" placeholder="Your Name">
+
+  <select id="userStore"></select>
+
+  <select id="restDay">
+    <option value="">Rest Day</option>
+    <option>Monday</option>
+    <option>Tuesday</option>
+    <option>Wednesday</option>
+    <option>Thursday</option>
+    <option>Friday</option>
+    <option>Saturday</option>
+    <option>Sunday</option>
+  </select>
+
+  <button onclick="enterApp()">Enter</button>
+</div>
+
+<div id="app">
+
+<h2>📊 Monthly Report</h2>
+
+<div id="userInfo"></div>
+
+<button onclick="openBonus()">💰 Open Bonus Calculator</button>
 
 <input type="date" id="date">
-
 <select id="store"></select>
 
 <input type="number" id="total" placeholder="Total Apps">
@@ -97,37 +101,35 @@
 
 <select id="nonapps" disabled>
   <option value="">Non Apps</option>
-  <option value="Yes">Yes</option>
-  <option value="No">No</option>
+  <option>Yes</option>
+  <option>No</option>
 </select>
 
 <button onclick="addEntry()">➕ Add Entry</button>
 <button onclick="saveAllToday()">💾 Save All</button>
-<button onclick="updateEntry()">💾 Save Update</button>
+<button onclick="updateEntry()">✏️ Update</button>
 
-<h3>📦 Preview</h3>
+<h3>Preview</h3>
 <table id="previewTable"></table>
 
-<h3>📅 Daily Report</h3>
-
+<h3>Daily Report</h3>
 <input type="date" id="filterDate">
-<button onclick="loadDayReport()">🔍 Load Day</button>
-<button onclick="saveDayPNG()">🖼 Save PNG</button>
+<button onclick="loadDayReport()">Load Day</button>
 
-<div id="dayCapture">
-  <h4 id="dayTitle"></h4>
-  <table id="dayReportTable"></table>
-</div>
+<h4 id="dayTitle"></h4>
+<table id="dayReportTable"></table>
 
-<h3>📊 Monthly Totals</h3>
+<h3>Monthly Totals</h3>
 <table id="monthlyTotals"></table>
+
+</div>
 
 <!-- BONUS MODAL -->
 <div id="bonusModal">
   <div id="bonusBox">
     <header>
       <h3>💰 Bonus Calculator</h3>
-      <button id="closeBtn" onclick="closeBonus()">Close</button>
+      <button onclick="closeBonus()">Close</button>
     </header>
     <iframe src="https://yuilovemiyu.github.io/Bonus-Calculator/"></iframe>
   </div>
@@ -135,49 +137,59 @@
 
 <script>
 
-// ================= FIREBASE =================
-const firebaseConfig = {
-  apiKey: "AIzaSyBoPZ6nioxI_fzVrdLSh-pQ_EEqSdPOnrY",
-  authDomain: "pattern-for-reporting.firebaseapp.com",
-  projectId: "pattern-for-reporting"
-};
+// 🔥 FIREBASE
+firebase.initializeApp({
+  apiKey: "AIzaSyADXlQJcV5KJXTfYBK5qscv7gd88-XNlKo",
+  authDomain: "today-s-reporter-3dceb.firebaseapp.com",
+  projectId: "today-s-reporter-3dceb"
+});
 
-firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// ================= STORES =================
+// STORES
 const stores = [
   "Brookside","Manggahan","Bacoor","Dasmarinas","Gentri Jr.",
   "Tanza","Kawit","Tanza Paradahan","GMA","Tagaytay",
   "Molino","Paliparan","San Pedro","Pacita",
-  "Binan Bayan","Crossing East","Anabu (Yssabelle)","Anabu (Ian)"
+  "Binan Bayan","Crossing East","Anabu (Yssabelle)","Anabu (Ian)","Rosario"
 ];
 
-// ================= STATE =================
+stores.forEach(s=>{
+  userStore.innerHTML += `<option>${s}</option>`;
+  store.innerHTML += `<option>${s}</option>`;
+});
+
+// USER DATA
+let currentUserData = {};
 let todayEntries = [];
 let editingId = null;
 
-// ================= INIT =================
-const storeSelect = document.getElementById("store");
+// ENTER APP
+function enterApp(){
 
-stores.forEach(s=>{
-  let o = document.createElement("option");
-  o.value = s;
-  o.text = s;
-  storeSelect.appendChild(o);
-});
+  currentUserData = {
+    username: username.value || "Unknown",
+    store: userStore.value,
+    restDay: restDay.value
+  };
 
-date.value = new Date().toISOString().split("T")[0];
-filterDate.value = date.value;
+  userBox.style.display = "none";
+  app.style.display = "block";
 
-// ================= NON APPS =================
+  userInfo.innerHTML =
+    `<b>${currentUserData.username}</b> (${currentUserData.store})`;
+
+  loadMonthlyTotals();
+}
+
+// INPUT RULE
 total.addEventListener("input", ()=>{
   nonapps.disabled = Number(total.value) > 1;
 });
 
-// ================= RESET =================
-function reset(){
-  store.selectedIndex = 0;
+// RESET
+function resetInputs(){
+  store.value = "";
   total.value = "";
   signed.value = "";
   rejected.value = "";
@@ -185,99 +197,70 @@ function reset(){
   nonapps.value = "";
 }
 
-// ================= ADD =================
 function addEntry(){
 
   todayEntries.push({
     date: date.value,
     store: store.value,
-    total: Number(total.value||0),
-    signed: Number(signed.value||0),
-    rejected: Number(rejected.value||0),
-    cancelled: Number(cancelled.value||0),
-    nonapps: nonapps.value || "-"
+    total: +total.value || 0,
+    signed: +signed.value || 0,
+    rejected: +rejected.value || 0,
+    cancelled: +cancelled.value || 0,
+    nonapps: nonapps.value || "-",
+    reportedBy: currentUserData.username,
+    userStore: currentUserData.store,
+    temp: true
   });
 
-  renderPreview();
-  reset();
+  loadDayReport(); // 🔥 refresh table immediately
+  resetInputs();
 }
+  
 
-// ================= PREVIEW =================
-function renderPreview(){
-
-  previewTable.innerHTML = `
-    <tr>
-      <th>Date</th><th>Store</th>
-      <th>Total</th><th>Signed</th>
-      <th>Rejected</th><th>Cancelled</th><th>Non Apps</th>
-    </tr>
-  `;
-
-  todayEntries.forEach(e=>{
-    previewTable.innerHTML += `
-      <tr>
-        <td>${e.date}</td>
-        <td>${e.store}</td>
-        <td>${e.total}</td>
-        <td>${e.signed}</td>
-        <td>${e.rejected}</td>
-        <td>${e.cancelled}</td>
-        <td>${e.nonapps}</td>
-      </tr>
-    `;
-  });
-}
-
-// ================= SAVE =================
+// Save
 async function saveAllToday(){
-
-  if(todayEntries.length === 0) return alert("No data");
 
   const batch = db.batch();
 
   todayEntries.forEach(e=>{
+    delete e.temp;
     batch.set(db.collection("reports").doc(), e);
   });
 
   await batch.commit();
 
   todayEntries = [];
-  renderPreview();
 
   await recomputeMonthly();
+  loadDayReport();
 
-  alert("Saved!");
+  alert("✅ Saved!");
 }
-
-// ================= MONTHLY RECOMPUTE =================
+  
+  
+  
+  
+  
+// MONTHLY
 async function recomputeMonthly(){
-
   const snap = await db.collection("reports").get();
-
   const map = {};
 
   snap.forEach(doc=>{
     const d = doc.data();
-    const month = d.date?.substring(0,7);
-    if(!month) return;
+    const m = d.date?.slice(0,7);
+    if(!m) return;
 
-    const key = month + "_" + d.store;
+    const key = m+"_"+d.store;
 
     if(!map[key]){
-      map[key] = {
-        month,
-        store: d.store,
-        total:0,
-        signed:0,
-        rejected:0,
-        cancelled:0
-      };
+      map[key] = {month:m,store:d.store,total:0,signed:0,rejected:0,cancelled:0};
     }
 
-    map[key].total += Number(d.total||0);
-    map[key].signed += Number(d.signed||0);
-    map[key].rejected += Number(d.rejected||0);
-    map[key].cancelled += Number(d.cancelled||0);
+    map[key].total += +d.total;
+    map[key].signed += +d.signed;
+    map[key].rejected += +d.rejected;
+    map[key].cancelled += +d.cancelled;
   });
 
   const batch = db.batch();
@@ -289,76 +272,36 @@ async function recomputeMonthly(){
   await batch.commit();
 }
 
-// ================= MONTHLY LOAD FIX (IMPORTANT) =================
+// LOAD MONTHLY
 function loadMonthlyTotals(){
+  db.collection("monthly_totals").onSnapshot(snapshot=>{
 
-  db.collection("monthly_totals")
-    .onSnapshot(snapshot=>{
+    monthlyTotals.innerHTML = `
+    <tr>
+      <th>Month</th><th>Store</th>
+      <th>Total</th><th>Signed</th>
+      <th>Rejected</th><th>Cancelled</th>
+    </tr>`;
 
-      monthlyTotals.innerHTML = `
-        <tr>
-          <th>Month</th><th>Store</th>
-          <th>Total</th><th>Signed</th>
-          <th>Rejected</th><th>Cancelled</th>
-        </tr>
-      `;
-
-      if(snapshot.empty){
-        monthlyTotals.innerHTML += `<tr><td colspan="6">No data</td></tr>`;
-        return;
-      }
-
-      let grouped = {};
-
-      snapshot.forEach(doc=>{
-        const d = doc.data();
-        if(!grouped[d.month]) grouped[d.month] = [];
-        grouped[d.month].push(d);
-      });
-
-      Object.keys(grouped).sort().forEach(month=>{
-
-        let t=0,s=0,r=0,c=0;
-
-        monthlyTotals.innerHTML += `
-          <tr style="background:#ddd;font-weight:bold">
-            <td colspan="6">${month}</td>
-          </tr>
-        `;
-
-        grouped[month].forEach(d=>{
-          t+=d.total; s+=d.signed; r+=d.rejected; c+=d.cancelled;
-
-          monthlyTotals.innerHTML += `
-            <tr>
-              <td>${d.month}</td>
-              <td>${d.store}</td>
-              <td>${d.total}</td>
-              <td>${d.signed}</td>
-              <td>${d.rejected}</td>
-              <td>${d.cancelled}</td>
-            </tr>
-          `;
-        });
-
-        monthlyTotals.innerHTML += `
-          <tr style="font-weight:bold;background:#f2f2f2">
-            <td colspan="2">${month} TOTAL</td>
-            <td>${t}</td>
-            <td>${s}</td>
-            <td>${r}</td>
-            <td>${c}</td>
-          </tr>
-        `;
-      });
-
+    snapshot.forEach(doc=>{
+      const d = doc.data();
+      monthlyTotals.innerHTML += `
+      <tr>
+        <td>${d.month}</td>
+        <td>${d.store}</td>
+        <td>${d.total}</td>
+        <td>${d.signed}</td>
+        <td>${d.rejected}</td>
+        <td>${d.cancelled}</td>
+      </tr>`;
     });
+  });
 }
 
-// ================= DAILY =================
+// Daily
 function loadDayReport(){
 
-  const day = filterDate.value;
+  const day = filterDate.value || date.value;
   dayTitle.innerText = "Daily: " + day;
 
   db.collection("reports")
@@ -366,35 +309,82 @@ function loadDayReport(){
     .onSnapshot(snap=>{
 
       dayReportTable.innerHTML = `
-        <tr>
-          <th>Date</th><th>Store</th>
-          <th>Total</th><th>Signed</th>
-          <th>Rejected</th><th>Cancelled</th><th>Non Apps</th><th>Action</th>
-        </tr>
-      `;
+      <tr>
+        <th>Date</th><th>Store</th>
+        <th>Total</th><th>Signed</th>
+        <th>Rejected</th><th>Cancelled</th>
+        <th>Non Apps</th><th>Action</th>
+      </tr>`;
 
+      // 🔹 FIRESTORE DATA
       snap.forEach(doc=>{
         const d = doc.data();
 
         dayReportTable.innerHTML += `
-          <tr>
-            <td>${d.date}</td>
-            <td>${d.store}</td>
-            <td>${d.total}</td>
-            <td>${d.signed}</td>
-            <td>${d.rejected}</td>
-            <td>${d.cancelled}</td>
-            <td>${d.nonapps}</td>
-            <td><button class="edit-btn" onclick='editEntry("${doc.id}", ${JSON.stringify(d)})'>Edit</button></td>
-          </tr>
-        `;
+        <tr>
+          <td>${d.date}</td>
+          <td>${d.store}</td>
+          <td>${d.total}</td>
+          <td>${d.signed}</td>
+          <td>${d.rejected}</td>
+          <td>${d.cancelled}</td>
+          <td>${d.nonapps}</td>
+          <td>
+            <button onclick='editEntry("${doc.id}", ${JSON.stringify(d)})'>Edit</button>
+          </td>
+        </tr>`;
       });
+
+      // 🔥 TEMP (UNSAVED ENTRIES)
+      todayEntries
+        .filter(e => e.date === day)
+        .forEach((e, index)=>{
+
+          dayReportTable.innerHTML += `
+          <tr style="background:#eaffea">
+            <td>${e.date}</td>
+            <td>${e.store}</td>
+            <td>${e.total}</td>
+            <td>${e.signed}</td>
+            <td>${e.rejected}</td>
+            <td>${e.cancelled}</td>
+            <td>${e.nonapps}</td>
+            <td>
+              <button onclick="editTemp(${index})">Edit</button>
+              <button onclick="deleteTemp(${index})">Delete</button>
+            </td>
+          </tr>`;
+        });
+
     });
 }
 
-// ================= EDIT =================
-function editEntry(id,data){
+function editTemp(index){
 
+  const data = todayEntries[index];
+
+  date.value = data.date;
+  store.value = data.store;
+  total.value = data.total;
+  signed.value = data.signed;
+  rejected.value = data.rejected;
+  cancelled.value = data.cancelled;
+  nonapps.value = data.nonapps;
+
+  // remove so it can be replaced
+  todayEntries.splice(index,1);
+
+  loadDayReport();
+}
+
+function deleteTemp(index){
+  todayEntries.splice(index,1);
+  loadDayReport();
+}
+
+
+// EDIT
+function editEntry(id,data){
   if(typeof data === "string") data = JSON.parse(data);
 
   date.value = data.date;
@@ -408,9 +398,8 @@ function editEntry(id,data){
   editingId = id;
 }
 
-// ================= UPDATE =================
+// UPDATE
 async function updateEntry(){
-
   await db.collection("reports").doc(editingId).update({
     date: date.value,
     store: store.value,
@@ -423,23 +412,12 @@ async function updateEntry(){
 
   editingId = null;
   await recomputeMonthly();
-
   alert("Updated");
 }
 
-// ================= BONUS =================
-function openBonus(){
-  bonusModal.style.display = "block";
-}
-
-function closeBonus(){
-  bonusModal.style.display = "none";
-}
-
-// ================= INIT LOAD =================
-window.onload = ()=>{
-  loadMonthlyTotals();
-};
+// BONUS
+function openBonus(){ bonusModal.style.display="block"; }
+function closeBonus(){ bonusModal.style.display="none"; }
 
 </script>
 
