@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HC/PG SA Monthly Report</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="manifest" href="manifest.json">
+  
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <style>
+    body { font-family: Arial; padding: 15px; }
+
+    input, select, button {
+      margin: 5px;
+      padding: 8px;
+      width: 100%;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+    }
+
+    th, td {
+      border: 1px solid #000;
+      padding: 6px;
+      text-align: center;
+      font-size: 12px;
+    }
+
+    #app { display:none; }
+    #userBox { max-width:400px; margin:auto; }
+
+    #bonusModal{
+      display:none;
+      position:fixed;
+      top:0; left:0;
+      width:100%; height:100%;
+      background:rgba(0,0,0,0.6);
+      z-index:999;
+    }
+
+    #bonusBox{
+      width:90%; height:90%;
+      background:white;
+      margin:2% auto;
+      padding:10px;
+      border-radius:10px;
+      display:flex;
+      flex-direction:column;
+    }
+
+    #bonusBox iframe{ flex:1; border:none; }
+    #bonusBox header{
+      display:flex;
+      justify-content:space-between;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ✅ SIMPLE USER ENTRY -->
+<div id="userBox">
+  <h2>Enter Details</h2>
+
+  <input id="username" placeholder="Your Name">
+
+  <select id="userStore"></select>
+
+  <select id="restDay">
+    <option value="">Rest Day</option>
+    <option>Monday</option>
+    <option>Tuesday</option>
+    <option>Wednesday</option>
+    <option>Thursday</option>
+    <option>Friday</option>
+    <option>Saturday</option>
+    <option>Sunday</option>
+  </select>
+
+  <button onclick="enterApp()">Enter</button>
+</div>
+
+<div id="app">
+
+<h2>📊 Monthly Report</h2>
+
+<div id="userInfo"></div>
+
+<button onclick="openBonus()">💰 Open Bonus Calculator</button>
+
+<input type="date" id="date">
+<select id="store"></select>
+
+<input type="number" id="total" placeholder="Total Apps">
+<input type="number" id="signed" placeholder="Signed">
+<input type="number" id="rejected" placeholder="Rejected">
+<input type="number" id="cancelled" placeholder="Cancelled">
+
+<select id="nonapps" disabled>
+  <option value="">Non Apps</option>
+  <option>Yes</option>
+  <option>No</option>
+</select>
+
+<button onclick="addEntry()">➕ Add Entry</button>
+<button onclick="saveAllToday()">💾 Save All</button>
+<button onclick="updateEntry()">✏️ Update</button>
+
+<h3>Daily Report</h3>
+<input type="date" id="filterDate">
+<button onclick="loadDayReport()">Load Day</button>
+
+<h4 id="dayTitle"></h4>
+<table id="dayReportTable"></table>
+
+<h3>Monthly Totals</h3>
+<table id="monthlyTotals"></table>
+
+</div>
+
+<!-- BONUS MODAL -->
+<div id="bonusModal">
+  <div id="bonusBox">
+    <header>
+      <h3>💰 Bonus Calculator</h3>
+      <button onclick="closeBonus()">Close</button>
+    </header>
+    <iframe src="https://yuilovemiyu.github.io/Bonus-Calculator/"></iframe>
+  </div>
+</div>
+
+<script>
+
+// 🔥 FIREBASE
+firebase.initializeApp({
+  apiKey: "AIzaSyADXlQJcV5KJXTfYBK5qscv7gd88-XNlKo",
+  authDomain: "today-s-reporter-3dceb.firebaseapp.com",
+  projectId: "today-s-reporter-3dceb"
+});
+
+const db = firebase.firestore();
+
+// STORES
+const stores = [
+  "Brookside","Manggahan","Bacoor","Dasmarinas","Gentri Jr.",
+  "Tanza","Kawit","Tanza Paradahan","GMA","Tagaytay",
+  "Molino","Paliparan","San Pedro","Pacita",
+  "Binan Bayan","Crossing East","Anabu (Yssabelle)","Anabu (Ian)","Rosario"
+];
+
+stores.forEach(s=>{
+  userStore.innerHTML += `<option>${s}</option>`;
+  store.innerHTML += `<option>${s}</option>`;
+});
+
+// USER DATA
+let currentUserData = {};
+let todayEntries = [];
+let editingId = null;
+
+// ENTER APP
+function enterApp(){
+
+  currentUserData = {
+    username: username.value || "Unknown",
+    store: userStore.value,
+    restDay: restDay.value
+  };
+
+  userBox.style.display = "none";
+  app.style.display = "block";
+
+  userInfo.innerHTML =
+    `<b>${currentUserData.username}</b> (${currentUserData.store})`;
+
+  loadMonthlyTotals();
+}
+
+// INPUT RULE
+total.addEventListener("input", ()=>{
+  nonapps.disabled = Number(total.value) > 1;
+});
+
+// RESET
+function resetInputs(){
+  store.value = "";
+  total.value = "";
+  signed.value = "";
+  rejected.value = "";
+  cancelled.value = "";
+  nonapps.value = "";
+}
+
+function addEntry(){
+
+  todayEntries.push({
+    date: date.value,
+    store: store.value,
+    total: +total.value || 0,
+    signed: +signed.value || 0,
+    rejected: +rejected.value || 0,
+    cancelled: +cancelled.value || 0,
+    nonapps: nonapps.value || "-",
+    reportedBy: currentUserData.username,
+    userStore: currentUserData.store,
+    temp: true
+  });
+
+  loadDayReport(); // 🔥 refresh table immediately
+  resetInputs();
+}
+  
+
+// Save
+async function saveAllToday(){
+
+  const batch = db.batch();
+
+  todayEntries.forEach(e=>{
+    delete e.temp;
+    batch.set(db.collection("reports").doc(), e);
+  });
+
+  await batch.commit();
+
+  todayEntries = [];
+
+  await recomputeMonthly();
+  loadDayReport();
+
+  alert("✅ Saved!");
+}
+
+function loadMonthlyTotals(){
+
+  db.collection("monthly_totals")
+    .onSnapshot(snapshot=>{
+
+      monthlyTotals.innerHTML = `
+        <tr>
+          <th>Month</th><th>Store</th>
+          <th>Total</th><th>Signed</th>
+          <th>Rejected</th><th>Cancelled</th>
+        </tr>
+      `;
+
+      if(snapshot.empty){
+        monthlyTotals.innerHTML += `<tr><td colspan="6">No data</td></tr>`;
+        return;
+      }
+
+      let grouped = {};
+
+      snapshot.forEach(doc=>{
+        const d = doc.data();
+        if(!grouped[d.month]) grouped[d.month] = [];
+        grouped[d.month].push(d);
+      });
+
+      Object.keys(grouped).sort().forEach(month=>{
+
+        let t=0,s=0,r=0,c=0;
+
+        monthlyTotals.innerHTML += `
+          <tr style="background:#ddd;font-weight:bold">
+            <td colspan="6">${month}</td>
+          </tr>
+        `;
+
+        grouped[month].forEach(d=>{
+          t+=d.total; s+=d.signed; r+=d.rejected; c+=d.cancelled;
+
+          monthlyTotals.innerHTML += `
+            <tr>
+              <td>${d.month}</td>
+              <td>${d.store}</td>
+              <td>${d.total}</td>
+              <td>${d.signed}</td>
+              <td>${d.rejected}</td>
+              <td>${d.cancelled}</td>
+            </tr>
+          `;
+        });
+
+        monthlyTotals.innerHTML += `
+          <tr style="font-weight:bold;background:#f2f2f2">
+            <td colspan="2">${month} TOTAL</td>
+            <td>${t}</td>
+            <td>${s}</td>
+            <td>${r}</td>
+            <td>${c}</td>
+          </tr>
+        `;
+      });
+
+    });
+}
+
+// Daily
+function loadDayReport(){
+
+  const day = filterDate.value || date.value;
+  dayTitle.innerText = "Daily: " + day;
+
+  db.collection("reports")
+    .where("date","==",day)
+    .onSnapshot(snap=>{
+
+      dayReportTable.innerHTML = `
+      <tr>
+        <th>Date</th><th>Store</th>
+        <th>Total</th><th>Signed</th>
+        <th>Rejected</th><th>Cancelled</th>
+        <th>Non Apps</th><th>Action</th>
+      </tr>`;
+
+      // 🔹 FIRESTORE DATA
+      snap.forEach(doc=>{
+        const d = doc.data();
+
+        dayReportTable.innerHTML += `
+        <tr>
+          <td>${d.date}</td>
+          <td>${d.store}</td>
+          <td>${d.total}</td>
+          <td>${d.signed}</td>
+          <td>${d.rejected}</td>
+          <td>${d.cancelled}</td>
+          <td>${d.nonapps}</td>
+          <td>
+            <button onclick='editEntry("${doc.id}", ${JSON.stringify(d)})'>Edit</button>
+          </td>
+        </tr>`;
+      });
+
+      // 🔥 TEMP (UNSAVED ENTRIES)
+      todayEntries
+        .filter(e => e.date === day)
+        .forEach((e, index)=>{
+
+          dayReportTable.innerHTML += `
+          <tr style="background:#eaffea">
+            <td>${e.date}</td>
+            <td>${e.store}</td>
+            <td>${e.total}</td>
+            <td>${e.signed}</td>
+            <td>${e.rejected}</td>
+            <td>${e.cancelled}</td>
+            <td>${e.nonapps}</td>
+            <td>
+              <button onclick="editTemp(${index})">Edit</button>
+              <button onclick="deleteTemp(${index})">Delete</button>
+            </td>
+          </tr>`;
+        });
+
+    });
+}
+
+function editTemp(index){
+
+  const data = todayEntries[index];
+
+  date.value = data.date;
+  store.value = data.store;
+  total.value = data.total;
+  signed.value = data.signed;
+  rejected.value = data.rejected;
+  cancelled.value = data.cancelled;
+  nonapps.value = data.nonapps;
+
+  // remove so it can be replaced
+  todayEntries.splice(index,1);
+
+  loadDayReport();
+}
+
+function deleteTemp(index){
+  todayEntries.splice(index,1);
+  loadDayReport();
+}
+
+
+// EDIT
+function editEntry(id,data){
+  if(typeof data === "string") data = JSON.parse(data);
+
+  date.value = data.date;
+  store.value = data.store;
+  total.value = data.total;
+  signed.value = data.signed;
+  rejected.value = data.rejected;
+  cancelled.value = data.cancelled;
+  nonapps.value = data.nonapps;
+
+  editingId = id;
+}
+
+// UPDATE
+async function updateEntry(){
+  await db.collection("reports").doc(editingId).update({
+    date: date.value,
+    store: store.value,
+    total: Number(total.value),
+    signed: Number(signed.value),
+    rejected: Number(rejected.value),
+    cancelled: Number(cancelled.value),
+    nonapps: nonapps.value
+  });
+
+  editingId = null;
+  await recomputeMonthly();
+  alert("Updated");
+}
+
+// BONUS
+function openBonus(){ bonusModal.style.display="block"; }
+function closeBonus(){ bonusModal.style.display="none"; }
+
+  // ================= INIT LOAD =================
+window.onload = ()=>{
+  loadMonthlyTotals();
+};
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js')
+    .then(() => console.log("✅ Service Worker Registered"))
+    .catch(err => console.log("SW error:", err));
+}
+  
+</script>
+
+</body>
+</html>
