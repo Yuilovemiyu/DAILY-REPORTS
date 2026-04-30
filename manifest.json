@@ -1,19 +1,20 @@
 {
   "name": "HC/PG SA Monthly Report",
-  "short_name": "SA Report",
+  "short_name": "HC/PG Report",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#005bac",
   "orientation": "portrait",
+  "description": "Fast daily and monthly reporting tool for HC/PG SAs. No login required.",
   "icons": [
     {
-      "src": "icons/icon-192.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "icons/icon-512.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
